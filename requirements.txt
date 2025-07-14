@@ -1,0 +1,5 @@
+anthropic==0.57.1
+playwright==1.53.0
+gymnasium==1.2.0
+Pillow==11.3.0
+numpy==2.2.6
