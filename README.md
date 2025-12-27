@@ -1,4 +1,4 @@
-# RL Env
+# Web Agent Harness
 
 Uses [Webarena](https://arxiv.org/pdf/2307.13854), [Playwright](https://playwright.dev/), and [Claude Computer use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/computer-use-tool)
 
