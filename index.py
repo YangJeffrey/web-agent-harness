@@ -4,6 +4,7 @@ import json
 import base64
 import io
 import re
+import argparse
 from typing import Dict, List, Any, Optional, Tuple
 from PIL import Image
 import numpy as np
@@ -15,7 +16,7 @@ from gymnasium import spaces
 class WebEnvironment(gym.Env):
     """Gym environment that wraps web browser interactions for RL"""
 
-    def __init__(self, headless: bool = False):
+    def __init__(self, environment_url: str = "https://www.saucedemo.com/", headless: bool = False):
         super().__init__()
 
         self.action_space = spaces.Dict({
@@ -40,6 +41,7 @@ class WebEnvironment(gym.Env):
         self.page = None
         self.playwright = None
         self.headless = headless
+        self.environment_url = environment_url
 
         self.keyboard_map = {
             'ctrl+a': 'Control+a', 'ctrl+c': 'Control+c', 'ctrl+v': 'Control+v', 'ctrl+x': 'Control+x',
@@ -60,7 +62,7 @@ class WebEnvironment(gym.Env):
                 context = await self.browser.new_context(viewport={"width": 1024, "height": 768})
                 self.page = await context.new_page()
 
-            await self.page.goto("https://www.saucedemo.com/", wait_until="networkidle")
+            await self.page.goto(self.environment_url, wait_until="networkidle")
 
             observation = await self._get_observation()
             return observation, {}
@@ -243,12 +245,12 @@ class WebEnvironment(gym.Env):
 class WebAgent:
     """Web agent that uses Claude computer use with Gym environment."""
 
-    def __init__(self, api_key: str, model: str = "claude-sonnet-4-20250514"):
+    def __init__(self, api_key: str, environment_url: str = "https://www.saucedemo.com/", model: str = "claude-sonnet-4-20250514"):
         self.client = Anthropic(api_key=api_key)
         self.model = model
         self.judge = Anthropic(api_key=api_key)
 
-        self.env = WebEnvironment(headless=False)
+        self.env = WebEnvironment(environment_url=environment_url, headless=False)
 
         self.reward_history = []
         self.task_feedback_history = []
@@ -504,21 +506,33 @@ class WebAgent:
 
 async def main():
     """Main function with learning loop"""
+    parser = argparse.ArgumentParser(description='Web automation agent with RL environment')
+    parser.add_argument('--environment', '-e', type=str, default='https://www.saucedemo.com/', 
+                       help='URL of the website/environment to interact with (default: https://www.saucedemo.com/)')
+    parser.add_argument('--task', '-t', type=str, default='Sign in, add a product to the cart, and checkout',
+                       help='Task description for the agent to complete (default: Sign in, add a product to the cart, and checkout)')
+    parser.add_argument('--max-iterations', '-i', type=int, default=50,
+                       help='Maximum iterations per attempt (default: 50)')
+    parser.add_argument('--attempts', '-a', type=int, default=5,
+                       help='Number of attempts (pass@k rate) (default: 5)')
+    
+    args = parser.parse_args()
+    
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         print("Set ANTHROPIC_API_KEY environment variable")
         return
 
-    agent = WebAgent(api_key=api_key)
-    task = "Sign in, add a product to the cart, and checkout"
+    agent = WebAgent(api_key=api_key, environment_url=args.environment)
+    task = args.task
 
     reset_next = True
 
-    for attempt in range(1, 6):
-        print(f"\n{'='*60}\nATTEMPT {attempt}/5: {task}\n{'='*60}")
+    for attempt in range(1, args.attempts + 1):
+        print(f"\n{'='*60}\nATTEMPT {attempt}/{args.attempts}: {task}\n{'='*60}")
 
         try:
-            result, evaluation = await agent.run_task(task, max_iterations=50, reset_environment=reset_next)
+            result, evaluation = await agent.run_task(task, max_iterations=args.max_iterations, reset_environment=reset_next)
 
             print(f"\n=== ATTEMPT {attempt} COMPLETE ===")
             print(f"Score: {evaluation['reward']:.3f} | Success: {evaluation['success']}")
